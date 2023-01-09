@@ -29,18 +29,18 @@ Author: Peter Boyle <paboyle@ph.ed.ac.uk>
 
 using namespace std;
 using namespace Grid;
-using namespace Grid::QCD;
+ ;
 
 template<class d>
 struct scal {
   d internal;
 };
 
-  Gamma::GammaMatrix Gmu [] = {
-    Gamma::GammaX,
-    Gamma::GammaY,
-    Gamma::GammaZ,
-    Gamma::GammaT
+  Gamma::Algebra Gmu [] = {
+    Gamma::Algebra::GammaX,
+    Gamma::Algebra::GammaY,
+    Gamma::Algebra::GammaZ,
+    Gamma::Algebra::GammaT
   };
 
 int main (int argc, char ** argv)
@@ -60,11 +60,11 @@ int main (int argc, char ** argv)
   GridParallelRNG          RNG4(UGrid);  RNG4.SeedFixedIntegers(seeds4);
 
   LatticeFermion    src(FGrid); random(RNG5,src);
-  LatticeFermion result(FGrid); result=zero;
-  LatticeFermion    ref(FGrid); ref=zero;
+  LatticeFermion result(FGrid); result=Zero();
+  LatticeFermion    ref(FGrid); ref=Zero();
   LatticeFermion    tmp(FGrid);
   LatticeFermion    err(FGrid);
-  LatticeGaugeField Umu(UGrid); random(RNG4,Umu);
+  LatticeGaugeField Umu(UGrid); SU<Nc>::HotConfiguration(RNG4,Umu);
 
   std::vector<LatticeColourMatrix> U(4,UGrid);
   for(int mu=0;mu<Nd;mu++){

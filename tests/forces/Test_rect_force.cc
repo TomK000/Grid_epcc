@@ -29,20 +29,20 @@ Author: Azusa Yamaguchi <ayamaguc@staffmail.ed.ac.uk>
 
 using namespace std;
 using namespace Grid;
-using namespace Grid::QCD;
+ ;
 
-#define parallel_for PARALLEL_FOR_LOOP for
+ 
 
 int main (int argc, char ** argv)
 {
   Grid_init(&argc,&argv);
 
-  std::vector<int> latt_size   = GridDefaultLatt();
-  std::vector<int> simd_layout = GridDefaultSimd(Nd,vComplex::Nsimd());
-  std::vector<int> mpi_layout  = GridDefaultMpi();
+  Coordinate latt_size   = GridDefaultLatt();
+  Coordinate simd_layout = GridDefaultSimd(Nd,vComplex::Nsimd());
+  Coordinate mpi_layout  = GridDefaultMpi();
 
   GridCartesian               Grid(latt_size,simd_layout,mpi_layout);
-  GridRedBlackCartesian     RBGrid(latt_size,simd_layout,mpi_layout);
+  GridRedBlackCartesian     RBGrid(&Grid);
 
   int threads = GridThread::GetThreads();
   std::cout<<GridLogMessage << "Grid is setup to use "<<threads<<" threads"<<std::endl;
@@ -50,16 +50,16 @@ int main (int argc, char ** argv)
   std::vector<int> seeds({1,2,3,4});
 
   GridParallelRNG          pRNG(&Grid);
-  pRNG.SeedRandomDevice();
+  pRNG.SeedFixedIntegers(std::vector<int>({45,12,81,9}));
 
   LatticeGaugeField U(&Grid);
 
-  SU3::HotConfiguration(pRNG,U);
+  SU<Nc>::HotConfiguration(pRNG,U);
   
   double beta = 1.0;
-  double c1   = 0.331;
 
-  PlaqPlusRectangleActionR Action(beta,c1);
+  IwasakiGaugeActionR Action(beta);
+  //  PlaqPlusRectangleActionR Action(beta,c1);
   //  WilsonGaugeActionR Action(beta);
 
   ComplexD S    = Action.S(U);
@@ -72,7 +72,7 @@ int main (int argc, char ** argv)
   ////////////////////////////////////
   // Modify the gauge field a little 
   ////////////////////////////////////
-  RealD dt = 0.0001;
+  RealD dt = 0.002;
 
   LatticeColourMatrix mommu(&Grid); 
   LatticeColourMatrix forcemu(&Grid); 
@@ -81,14 +81,17 @@ int main (int argc, char ** argv)
 
   for(int mu=0;mu<Nd;mu++){
 
-    SU3::GaussianFundamentalLieAlgebraMatrix(pRNG, mommu); // Traceless antihermitian momentum; gaussian in lie alg
+    SU<Nc>::GaussianFundamentalLieAlgebraMatrix(pRNG, mommu); // Traceless antihermitian momentum; gaussian in lie alg
 
     PokeIndex<LorentzIndex>(mom,mommu,mu);
 
     // fourth order exponential approx
-    parallel_for(auto i=mom.begin();i<mom.end();i++){ // exp(pmu dt) * Umu
-      Uprime[i](mu) = U[i](mu) + mom[i](mu)*U[i](mu)*dt ;
-    }
+    autoView(Uprime_v, Uprime, CpuWrite);
+    autoView( U_v , U, CpuRead);
+    autoView( mom_v, mom, CpuRead);
+    thread_foreach(i,mom_v,{ // exp(pmu dt) * Umu
+      Uprime_v[i](mu) = U_v[i](mu) + mom_v[i](mu)*U_v[i](mu)*dt ;
+    });
   }
 
   ComplexD Sprime    = Action.S(Uprime);
@@ -97,7 +100,7 @@ int main (int argc, char ** argv)
   // Use derivative to estimate dS
   //////////////////////////////////////////////
 
-  LatticeComplex dS(&Grid); dS = zero;
+  LatticeComplex dS(&Grid); dS = Zero();
 
   for(int mu=0;mu<Nd;mu++){
 
@@ -112,12 +115,15 @@ int main (int argc, char ** argv)
     dS = dS - trace(mommu*UdSdUmu)*dt*2.0;
 
   }
-  Complex dSpred    = sum(dS);
+  ComplexD dSpred    = sum(dS);
 
+  std::cout << std::setprecision(15)<<std::endl;
   std::cout << GridLogMessage << " S      "<<S<<std::endl;
   std::cout << GridLogMessage << " Sprime "<<Sprime<<std::endl;
   std::cout << GridLogMessage << "dS      "<<Sprime-S<<std::endl;
   std::cout << GridLogMessage << "pred dS "<< dSpred <<std::endl;
+
+  assert( fabs(real(Sprime-S-dSpred)) < 1.0e-2 ) ;
 
   std::cout<< GridLogMessage << "Done" <<std::endl;
   Grid_finalize();

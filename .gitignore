@@ -83,32 +83,36 @@ ltmain.sh
 .Trashes
 ehthumbs.db
 Thumbs.db
+.dirstamp
 
 # build directory #
 ###################
 build*/*
+Documentation/_build
 
 # IDE related files #
 #####################
 *.xcodeproj/*
 build.sh
+.vscode
+*.code-workspace
 
 # Eigen source #
 ################
-lib/Eigen/*
-
-# FFTW source #
-################
-lib/fftw/*
+Grid/Eigen
+Eigen/*
 
 # libtool macros #
 ##################
 m4/lt*
 m4/libtool.m4
 
-# Buck files #
-##############
-.buck*
-buck-out
-BUCK
-make-bin-BUCK.sh
+# github pages #
+################
+gh-pages/
+
+# generated sources #
+#####################
+Grid/qcd/spin/gamma-gen/*.h
+Grid/qcd/spin/gamma-gen/*.cc
+Grid/util/Version.h

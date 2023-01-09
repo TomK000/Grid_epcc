@@ -30,15 +30,15 @@ directory
 
 using namespace std;
 using namespace Grid;
-using namespace Grid::QCD;
+ ;
 
 template <class d>
 struct scal {
   d internal;
 };
 
-Gamma::GammaMatrix Gmu[] = {Gamma::GammaX, Gamma::GammaY, Gamma::GammaZ,
-                            Gamma::GammaT};
+Gamma::Algebra Gmu[] = {Gamma::Algebra::GammaX, Gamma::Algebra::GammaY, Gamma::Algebra::GammaZ,
+                            Gamma::Algebra::GammaT};
 
 int main(int argc, char** argv) {
   Grid_init(&argc, &argv);
@@ -64,10 +64,10 @@ int main(int argc, char** argv) {
   LatticeFermion src(FGrid);
   random(RNG5, src);
   LatticeFermion result(FGrid);
-  result = zero;
+  result = Zero();
   LatticeGaugeField Umu(UGrid);
 
-  SU3::HotConfiguration(RNG4, Umu);
+  SU<Nc>::HotConfiguration(RNG4, Umu);
 
   std::cout << GridLogMessage << "Lattice dimensions: " << GridDefaultLatt()
             << "   Ls: " << Ls << std::endl;
@@ -84,12 +84,12 @@ int main(int argc, char** argv) {
   LatticeFermion src_o(FrbGrid);
   LatticeFermion result_o(FrbGrid);
   pickCheckerboard(Odd, src_o, src);
-  result_o = zero;
+  result_o = Zero();
 
   GridStopWatch CGTimer;
 
   SchurDiagMooeeOperator<DomainWallFermionR, LatticeFermion> HermOpEO(Ddwf);
-  ConjugateGradient<LatticeFermion> CG(1.0e-8, 10000, 0);// switch off the assert
+  ConjugateGradient<LatticeFermion> CG(1.0e-5, 10000, 0);// switch off the assert
 
   CGTimer.Start();
   CG(HermOpEO, src_o, result_o);

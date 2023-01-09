@@ -29,18 +29,18 @@ Author: Peter Boyle <paboyle@ph.ed.ac.uk>
 
 using namespace std;
 using namespace Grid;
-using namespace Grid::QCD;
+ ;
 
 template<class d>
 struct scal {
   d internal;
 };
 
-  Gamma::GammaMatrix Gmu [] = {
-    Gamma::GammaX,
-    Gamma::GammaY,
-    Gamma::GammaZ,
-    Gamma::GammaT
+  Gamma::Algebra Gmu [] = {
+    Gamma::Algebra::GammaX,
+    Gamma::Algebra::GammaY,
+    Gamma::Algebra::GammaZ,
+    Gamma::Algebra::GammaT
   };
 
 int main (int argc, char ** argv)
@@ -48,19 +48,19 @@ int main (int argc, char ** argv)
   Grid_init(&argc,&argv);
 
 
-  std::vector<int> latt_size   = GridDefaultLatt();
-  std::vector<int> simd_layout = GridDefaultSimd(Nd,vComplex::Nsimd());
-  std::vector<int> mpi_layout  = GridDefaultMpi();
+  Coordinate latt_size   = GridDefaultLatt();
+  Coordinate simd_layout = GridDefaultSimd(Nd,vComplex::Nsimd());
+  Coordinate mpi_layout  = GridDefaultMpi();
   GridCartesian               Grid(latt_size,simd_layout,mpi_layout);
-  GridRedBlackCartesian     RBGrid(latt_size,simd_layout,mpi_layout);
+  GridRedBlackCartesian     RBGrid(&Grid);
 
   std::vector<int> seeds({1,2,3,4});
   GridParallelRNG          pRNG(&Grid);  pRNG.SeedFixedIntegers(seeds);
 
   LatticeFermion src(&Grid); random(pRNG,src);
   RealD nrm = norm2(src);
-  LatticeFermion result(&Grid); result=zero;
-  LatticeGaugeField Umu(&Grid); random(pRNG,Umu);
+  LatticeFermion result(&Grid); result=Zero();
+  LatticeGaugeField Umu(&Grid); SU<Nc>::HotConfiguration(pRNG,Umu);
 
   std::vector<LatticeColourMatrix> U(4,&Grid);
 
@@ -78,7 +78,7 @@ int main (int argc, char ** argv)
   LatticeFermion    src_o(&RBGrid);
   LatticeFermion result_o(&RBGrid);
   pickCheckerboard(Odd,src_o,src);
-  result_o=zero;
+  result_o=Zero();
 
   SchurDiagMooeeOperator<WilsonFermionR,LatticeFermion> HermOpEO(Dw);
   ConjugateGradient<LatticeFermion> CG(1.0e-8,10000);

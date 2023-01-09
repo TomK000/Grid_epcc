@@ -29,18 +29,18 @@ Author: Peter Boyle <paboyle@ph.ed.ac.uk>
 
 using namespace std;
 using namespace Grid;
-using namespace Grid::QCD;
+ ;
 
 template<class d>
 struct scal {
   d internal;
 };
 
-  Gamma::GammaMatrix Gmu [] = {
-    Gamma::GammaX,
-    Gamma::GammaY,
-    Gamma::GammaZ,
-    Gamma::GammaT
+  Gamma::Algebra Gmu [] = {
+    Gamma::Algebra::GammaX,
+    Gamma::Algebra::GammaY,
+    Gamma::Algebra::GammaZ,
+    Gamma::Algebra::GammaT
   };
 
 int main (int argc, char ** argv)
@@ -60,8 +60,8 @@ int main (int argc, char ** argv)
   GridParallelRNG          RNG4(UGrid);  RNG4.SeedFixedIntegers(seeds4);
 
   LatticeFermion    src(FGrid); random(RNG5,src);
-  LatticeFermion result(FGrid); result=zero;
-  LatticeGaugeField Umu(UGrid); random(RNG4,Umu);
+  LatticeFermion result(FGrid); result=Zero();
+  LatticeGaugeField Umu(UGrid); SU<Nc>::HotConfiguration(RNG4,Umu);
 
   std::vector<LatticeColourMatrix> U(4,UGrid);
   for(int mu=0;mu<Nd;mu++){
@@ -73,7 +73,7 @@ int main (int argc, char ** argv)
   DomainWallFermionR Ddwf(Umu,*FGrid,*FrbGrid,*UGrid,*UrbGrid,mass,M5);
 
   MdagMLinearOperator<DomainWallFermionR,LatticeFermion> HermOp(Ddwf);
-  ConjugateGradient<LatticeFermion> CG(1.0e-8,10000);
+  ConjugateGradient<LatticeFermion> CG(1.0e-6,10000);
   CG(HermOp,src,result);
 
   Grid_finalize();

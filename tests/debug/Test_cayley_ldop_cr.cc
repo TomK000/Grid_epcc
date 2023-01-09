@@ -29,7 +29,7 @@ Author: Peter Boyle <paboyle@ph.ed.ac.uk>
 
 using namespace std;
 using namespace Grid;
-using namespace Grid::QCD;
+ ;
 
 int main (int argc, char ** argv)
 {
@@ -46,7 +46,7 @@ int main (int argc, char ** argv)
   ///////////////////////////////////////////////////
   // Construct a coarsened grid; utility for this?
   ///////////////////////////////////////////////////
-  std::vector<int> clatt = GridDefaultLatt();
+  Coordinate clatt = GridDefaultLatt();
   for(int d=0;d<clatt.size();d++){
     clatt[d] = clatt[d]/2;
   }
@@ -61,23 +61,24 @@ int main (int argc, char ** argv)
   GridParallelRNG          CRNG(Coarse5d);CRNG.SeedFixedIntegers(cseeds);
 
   LatticeFermion    src(FGrid); gaussian(RNG5,src);
-  LatticeFermion result(FGrid); result=zero;
-  LatticeFermion    ref(FGrid); ref=zero;
+  LatticeFermion result(FGrid); result=Zero();
+  LatticeFermion    ref(FGrid); ref=Zero();
   LatticeFermion    tmp(FGrid);
   LatticeFermion    err(FGrid);
   LatticeGaugeField Umu(UGrid); 
 
-  NerscField header;
+  FieldMetaData header;
   std::string file("./ckpoint_lat.400");
   NerscIO::readConfiguration(Umu,header,file);
 
-  //  SU3::ColdConfiguration(RNG4,Umu);
-  //  SU3::TepidConfiguration(RNG4,Umu);
-  //  SU3::HotConfiguration(RNG4,Umu);
-  //  Umu=zero;
+  //  SU<Nc>::ColdConfiguration(RNG4,Umu);
+  //  SU<Nc>::TepidConfiguration(RNG4,Umu);
+  //  SU<Nc>::HotConfiguration(RNG4,Umu);
+  //  Umu=Zero();
 
   RealD mass=0.1;
   RealD M5=1.5;
+  int cb=0;
 
   std::cout<<GridLogMessage << "**************************************************"<< std::endl;
   std::cout<<GridLogMessage << "Building g5R5 hermitian DWF operator" <<std::endl;
@@ -95,9 +96,8 @@ int main (int argc, char ** argv)
   std::cout<<GridLogMessage << "Calling Aggregation class to build subspace" <<std::endl;
   std::cout<<GridLogMessage << "**************************************************"<< std::endl;
   MdagMLinearOperator<DomainWallFermionR,LatticeFermion> HermDefOp(Ddwf);
-  Subspace Aggregates(Coarse5d,FGrid);
+  Subspace Aggregates(Coarse5d,FGrid,cb);
   Aggregates.CreateSubspace(RNG5,HermDefOp);
-
 
   LittleDiracOperator LittleDiracOp(*Coarse5d);
   LittleDiracOp.CoarsenOperator(FGrid,HermIndefOp,Aggregates);
@@ -105,7 +105,7 @@ int main (int argc, char ** argv)
   CoarseVector c_src (Coarse5d);
   CoarseVector c_res (Coarse5d);
   gaussian(CRNG,c_src);
-  c_res=zero;
+  c_res=Zero();
 
   std::cout<<GridLogMessage << "**************************************************"<< std::endl;
   std::cout<<GridLogMessage << "Solving mdagm-CG on coarse space "<< std::endl;

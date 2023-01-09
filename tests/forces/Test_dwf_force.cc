@@ -29,17 +29,15 @@ Author: Peter Boyle <paboyle@ph.ed.ac.uk>
 
 using namespace std;
 using namespace Grid;
-using namespace Grid::QCD;
 
-#define parallel_for PARALLEL_FOR_LOOP for
 
 int main (int argc, char ** argv)
 {
   Grid_init(&argc,&argv);
 
-  std::vector<int> latt_size   = GridDefaultLatt();
-  std::vector<int> simd_layout = GridDefaultSimd(Nd,vComplex::Nsimd());
-  std::vector<int> mpi_layout  = GridDefaultMpi();
+  Coordinate latt_size   = GridDefaultLatt();
+  Coordinate simd_layout = GridDefaultSimd(Nd,vComplex::Nsimd());
+  Coordinate mpi_layout  = GridDefaultMpi();
 
   const int Ls=8;
 
@@ -47,8 +45,8 @@ int main (int argc, char ** argv)
   GridRedBlackCartesian * UrbGrid = SpaceTimeGrid::makeFourDimRedBlackGrid(UGrid);
   GridCartesian         * FGrid   = SpaceTimeGrid::makeFiveDimGrid(Ls,UGrid);
   GridRedBlackCartesian * FrbGrid = SpaceTimeGrid::makeFiveDimRedBlackGrid(Ls,UGrid);
-
-  std::vector<int> seeds4({1,2,3,4});
+  
+  std::vector<int> seeds4({1,2,3,5});
   std::vector<int> seeds5({5,6,7,8});
   GridParallelRNG          RNG5(FGrid);  RNG5.SeedFixedIntegers(seeds5);
   GridParallelRNG          RNG4(UGrid);  RNG4.SeedFixedIntegers(seeds4);
@@ -62,7 +60,7 @@ int main (int argc, char ** argv)
 
   LatticeGaugeField U(UGrid);
 
-  SU3::HotConfiguration(RNG4,U);
+  SU<Nc>::HotConfiguration(RNG4,U);
   
   ////////////////////////////////////
   // Unmodified matrix element
@@ -96,23 +94,26 @@ int main (int argc, char ** argv)
 
   for(int mu=0;mu<Nd;mu++){
 
-    SU3::GaussianFundamentalLieAlgebraMatrix(RNG4, mommu); // Traceless antihermitian momentum; gaussian in lie alg
+    SU<Nc>::GaussianFundamentalLieAlgebraMatrix(RNG4, mommu); // Traceless antihermitian momentum; gaussian in lie alg
 
     PokeIndex<LorentzIndex>(mom,mommu,mu);
 
     // fourth order exponential approx
-    parallel_for(auto i=mom.begin();i<mom.end();i++){
-      Uprime[i](mu) =
-	  U[i](mu)
-	+ mom[i](mu)*U[i](mu)*dt 
-	+ mom[i](mu) *mom[i](mu) *U[i](mu)*(dt*dt/2.0)
-	+ mom[i](mu) *mom[i](mu) *mom[i](mu) *U[i](mu)*(dt*dt*dt/6.0)
-	+ mom[i](mu) *mom[i](mu) *mom[i](mu) *mom[i](mu) *U[i](mu)*(dt*dt*dt*dt/24.0)
-	+ mom[i](mu) *mom[i](mu) *mom[i](mu) *mom[i](mu) *mom[i](mu) *U[i](mu)*(dt*dt*dt*dt*dt/120.0)
-	+ mom[i](mu) *mom[i](mu) *mom[i](mu) *mom[i](mu) *mom[i](mu) *mom[i](mu) *U[i](mu)*(dt*dt*dt*dt*dt*dt/720.0)
-	;
-    }
 
+    autoView( mom_v, mom, CpuRead);
+    autoView( U_v , U, CpuRead);
+    autoView(Uprime_v, Uprime, CpuWrite);
+
+    thread_foreach( i,mom_v,{
+      Uprime_v[i](mu) =	  U_v[i](mu)
+	+ mom_v[i](mu)*U_v[i](mu)*dt 
+	+ mom_v[i](mu) *mom_v[i](mu) *U_v[i](mu)*(dt*dt/2.0)
+	+ mom_v[i](mu) *mom_v[i](mu) *mom_v[i](mu) *U_v[i](mu)*(dt*dt*dt/6.0)
+	+ mom_v[i](mu) *mom_v[i](mu) *mom_v[i](mu) *mom_v[i](mu) *U_v[i](mu)*(dt*dt*dt*dt/24.0)
+	+ mom_v[i](mu) *mom_v[i](mu) *mom_v[i](mu) *mom_v[i](mu) *mom_v[i](mu) *U_v[i](mu)*(dt*dt*dt*dt*dt/120.0)
+	+ mom_v[i](mu) *mom_v[i](mu) *mom_v[i](mu) *mom_v[i](mu) *mom_v[i](mu) *mom_v[i](mu) *U_v[i](mu)*(dt*dt*dt*dt*dt*dt/720.0)
+	;
+    });
   }
   
   Ddwf.ImportGauge(Uprime);
@@ -125,7 +126,7 @@ int main (int argc, char ** argv)
   //////////////////////////////////////////////
 
 
-  LatticeComplex dS(UGrid); dS = zero;
+  LatticeComplex dS(UGrid); dS = Zero();
   for(int mu=0;mu<Nd;mu++){
     mommu   = PeekIndex<LorentzIndex>(UdSdU,mu);
     mommu=Ta(mommu)*2.0;
@@ -141,12 +142,15 @@ int main (int argc, char ** argv)
 
   }
 
-  Complex dSpred    = sum(dS);
+  ComplexD dSpred    = sum(dS);
 
+  std::cout << std::setprecision(14);
   std::cout << GridLogMessage << " S      "<<S<<std::endl;
   std::cout << GridLogMessage << " Sprime "<<Sprime<<std::endl;
   std::cout << GridLogMessage << "dS      "<<Sprime-S<<std::endl;
   std::cout << GridLogMessage << "predict dS    "<< dSpred <<std::endl;
+
+  assert( fabs(real(Sprime-S-dSpred)) < 1.0 ) ;
 
   std::cout<< GridLogMessage << "Done" <<std::endl;
   Grid_finalize();

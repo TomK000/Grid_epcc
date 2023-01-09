@@ -29,18 +29,17 @@ Author: Peter Boyle <paboyle@ph.ed.ac.uk>
 
 using namespace std;
 using namespace Grid;
-using namespace Grid::QCD;
 
 template<class d>
 struct scal {
   d internal;
 };
 
-  Gamma::GammaMatrix Gmu [] = {
-    Gamma::GammaX,
-    Gamma::GammaY,
-    Gamma::GammaZ,
-    Gamma::GammaT
+  Gamma::Algebra Gmu [] = {
+    Gamma::Algebra::GammaX,
+    Gamma::Algebra::GammaY,
+    Gamma::Algebra::GammaZ,
+    Gamma::Algebra::GammaT
   };
 
 int main (int argc, char ** argv)
@@ -49,6 +48,9 @@ int main (int argc, char ** argv)
 
   const int Ls=8;
 
+  std::cout << GridLogMessage << "::::: NB: to enable a quick bit reproducibility check use the --checksums flag. " << std::endl;
+
+  { 
   GridCartesian         * UGrid   = SpaceTimeGrid::makeFourDimGrid(GridDefaultLatt(), GridDefaultSimd(Nd,vComplexD::Nsimd()),GridDefaultMpi());
   GridRedBlackCartesian * UrbGrid = SpaceTimeGrid::makeFourDimRedBlackGrid(UGrid);
   GridCartesian         * FGrid   = SpaceTimeGrid::makeFiveDimGrid(Ls,UGrid);
@@ -65,11 +67,11 @@ int main (int argc, char ** argv)
   GridParallelRNG          RNG4(UGrid);  RNG4.SeedFixedIntegers(seeds4);
 
   LatticeFermionD    src(FGrid); random(RNG5,src);
-  LatticeFermionD result(FGrid); result=zero;
+  LatticeFermionD result(FGrid); result=Zero();
   LatticeGaugeFieldD Umu(UGrid);
   LatticeGaugeFieldF Umu_f(UGrid_f); 
   
-  SU3::HotConfiguration(RNG4,Umu);
+  SU<Nc>::HotConfiguration(RNG4,Umu);
 
   precisionChange(Umu_f,Umu);
   
@@ -82,27 +84,57 @@ int main (int argc, char ** argv)
   LatticeFermionD result_o(FrbGrid);
   LatticeFermionD result_o_2(FrbGrid);
   pickCheckerboard(Odd,src_o,src);
-  result_o.checkerboard = Odd;
-  result_o = zero;
-  result_o_2.checkerboard = Odd;
-  result_o_2 = zero;
+  result_o.Checkerboard() = Odd;
+  result_o = Zero();
+  result_o_2.Checkerboard() = Odd;
+  result_o_2 = Zero();
 
   SchurDiagMooeeOperator<DomainWallFermionD,LatticeFermionD> HermOpEO(Ddwf);
   SchurDiagMooeeOperator<DomainWallFermionF,LatticeFermionF> HermOpEO_f(Ddwf_f);
 
-  std::cout << "Starting mixed CG" << std::endl;
+  std::cout << GridLogMessage << "::::::::::::: Starting mixed CG" << std::endl;
   MixedPrecisionConjugateGradient<LatticeFermionD,LatticeFermionF> mCG(1.0e-8, 10000, 50, FrbGrid_f, HermOpEO_f, HermOpEO);
   mCG(src_o,result_o);
 
-  std::cout << "Starting regular CG" << std::endl;
+  std::cout << GridLogMessage << "::::::::::::: Starting regular CG" << std::endl;
   ConjugateGradient<LatticeFermionD> CG(1.0e-8,10000);
   CG(HermOpEO,src_o,result_o_2);
+
+  MemoryManager::Print();
 
   LatticeFermionD diff_o(FrbGrid);
   RealD diff = axpy_norm(diff_o, -1.0, result_o, result_o_2);
 
-  std::cout << "Diff between mixed and regular CG: " << diff << std::endl;
+  std::cout << GridLogMessage << "::::::::::::: Diff between mixed and regular CG: " << diff << std::endl;
 
+  #ifdef HAVE_LIME
+  if( GridCmdOptionExists(argv,argv+argc,"--checksums") ){
   
+  std::string file1("./Propagator1");
+  emptyUserRecord record;
+  uint32_t nersc_csum;
+  uint32_t scidac_csuma;
+  uint32_t scidac_csumb;
+  typedef SpinColourVectorD   FermionD;
+  typedef vSpinColourVectorD vFermionD;
+
+  BinarySimpleMunger<FermionD,FermionD> munge;
+  std::string format = getFormatString<vFermionD>();
+  
+  BinaryIO::writeLatticeObject<vFermionD,FermionD>(result_o,file1,munge, 0, format,
+						   nersc_csum,scidac_csuma,scidac_csumb);
+
+  std::cout << GridLogMessage << " Mixed checksums "<<std::hex << scidac_csuma << " "<<scidac_csumb<<std::endl;
+
+  BinaryIO::writeLatticeObject<vFermionD,FermionD>(result_o_2,file1,munge, 0, format,
+						   nersc_csum,scidac_csuma,scidac_csumb);
+
+  std::cout << GridLogMessage << " CG checksums "<<std::hex << scidac_csuma << " "<<scidac_csumb<<std::endl;
+  }
+  #endif
+  }
+  
+  MemoryManager::Print();
+
   Grid_finalize();
 }

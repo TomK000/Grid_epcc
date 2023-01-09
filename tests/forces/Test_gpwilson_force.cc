@@ -29,26 +29,20 @@ Author: paboyle <paboyle@ph.ed.ac.uk>
 
 using namespace std;
 using namespace Grid;
-using namespace Grid::QCD;
-
-#define parallel_for PARALLEL_FOR_LOOP for
 
 int main (int argc, char ** argv)
 {
   Grid_init(&argc,&argv);
 
-  std::vector<int> latt_size   = GridDefaultLatt();
-  std::vector<int> simd_layout = GridDefaultSimd(Nd,vComplex::Nsimd());
-  std::vector<int> mpi_layout  = GridDefaultMpi();
-
-  const int Ls=8;
+  Coordinate latt_size   = GridDefaultLatt();
+  Coordinate simd_layout = GridDefaultSimd(Nd,vComplex::Nsimd());
+  Coordinate mpi_layout  = GridDefaultMpi();
 
   GridCartesian         * UGrid   = SpaceTimeGrid::makeFourDimGrid(GridDefaultLatt(), 
 								   GridDefaultSimd(Nd,vComplex::Nsimd()),
 								   GridDefaultMpi());
   GridRedBlackCartesian * UrbGrid = SpaceTimeGrid::makeFourDimRedBlackGrid(UGrid);
   GridCartesian         * FGrid   = UGrid;
-  GridRedBlackCartesian * FrbGrid = UrbGrid;
 
   std::vector<int> seeds4({1,2,3,4});
   GridParallelRNG          RNG4(UGrid);  RNG4.SeedFixedIntegers(seeds4);
@@ -63,13 +57,12 @@ int main (int argc, char ** argv)
 
   LatticeGaugeField U(UGrid);
 
-  SU3::HotConfiguration(RNG4,U);
+  SU<Nc>::HotConfiguration(RNG4,U);
   
   ////////////////////////////////////
   // Unmodified matrix element
   ////////////////////////////////////
   RealD mass=0.01; 
-  RealD M5=1.8; 
 
   const int nu = 3;
   std::vector<int> twists(Nd,0);  twists[nu] = 1;
@@ -91,7 +84,7 @@ int main (int argc, char ** argv)
   ////////////////////////////////////
   // Modify the gauge field a little 
   ////////////////////////////////////
-  RealD dt = 0.00001;
+  RealD dt = 0.01;
 
   LatticeColourMatrix mommu(UGrid); 
   LatticeColourMatrix forcemu(UGrid); 
@@ -100,22 +93,26 @@ int main (int argc, char ** argv)
 
   for(int mu=0;mu<Nd;mu++){
 
-    SU3::GaussianFundamentalLieAlgebraMatrix(RNG4, mommu); // Traceless antihermitian momentum; gaussian in lie alg
+    // Traceless antihermitian momentum; gaussian in lie alg
+    SU<Nc>::GaussianFundamentalLieAlgebraMatrix(RNG4, mommu); 
 
     PokeIndex<LorentzIndex>(mom,mommu,mu);
 
     // fourth order exponential approx
-    parallel_for(auto i=mom.begin();i<mom.end();i++){
-      Uprime[i](mu) =
-	  U[i](mu)
-	+ mom[i](mu)*U[i](mu)*dt 
-	+ mom[i](mu) *mom[i](mu) *U[i](mu)*(dt*dt/2.0)
-	+ mom[i](mu) *mom[i](mu) *mom[i](mu) *U[i](mu)*(dt*dt*dt/6.0)
-	+ mom[i](mu) *mom[i](mu) *mom[i](mu) *mom[i](mu) *U[i](mu)*(dt*dt*dt*dt/24.0)
-	+ mom[i](mu) *mom[i](mu) *mom[i](mu) *mom[i](mu) *mom[i](mu) *U[i](mu)*(dt*dt*dt*dt*dt/120.0)
-	+ mom[i](mu) *mom[i](mu) *mom[i](mu) *mom[i](mu) *mom[i](mu) *mom[i](mu) *U[i](mu)*(dt*dt*dt*dt*dt*dt/720.0)
+    autoView( mom_v, mom, CpuRead);
+    autoView( U_v , U, CpuRead);
+    autoView(Uprime_v, Uprime, CpuWrite);
+
+    thread_foreach(i,mom_v,{
+      Uprime_v[i](mu) =	  U_v[i](mu)
+	+ mom_v[i](mu)*U_v[i](mu)*dt 
+	+ mom_v[i](mu) *mom_v[i](mu) *U_v[i](mu)*(dt*dt/2.0)
+	+ mom_v[i](mu) *mom_v[i](mu) *mom_v[i](mu) *U_v[i](mu)*(dt*dt*dt/6.0)
+	+ mom_v[i](mu) *mom_v[i](mu) *mom_v[i](mu) *mom_v[i](mu) *U_v[i](mu)*(dt*dt*dt*dt/24.0)
+	+ mom_v[i](mu) *mom_v[i](mu) *mom_v[i](mu) *mom_v[i](mu) *mom_v[i](mu) *U_v[i](mu)*(dt*dt*dt*dt*dt/120.0)
+	+ mom_v[i](mu) *mom_v[i](mu) *mom_v[i](mu) *mom_v[i](mu) *mom_v[i](mu) *mom_v[i](mu) *U_v[i](mu)*(dt*dt*dt*dt*dt*dt/720.0)
 	;
-    }
+    });
 
   }
   
@@ -128,41 +125,29 @@ int main (int argc, char ** argv)
   // Use derivative to estimate dS
   //////////////////////////////////////////////
 
-
-  LatticeComplex dS(UGrid); dS = zero;
   for(int mu=0;mu<Nd;mu++){
     mommu   = PeekIndex<LorentzIndex>(UdSdU,mu);
     mommu=Ta(mommu)*2.0;
     PokeIndex<LorentzIndex>(UdSdU,mommu,mu);
   }
 
+  LatticeComplex dS(UGrid); dS = Zero();
   for(int mu=0;mu<Nd;mu++){
     forcemu = PeekIndex<LorentzIndex>(UdSdU,mu);
     mommu   = PeekIndex<LorentzIndex>(mom,mu);
 
     // Update PF action density
     dS = dS+trace(mommu*forcemu)*dt;
-
   }
 
-  Complex dSpred    = sum(dS);
-
-  // From TwoFlavourPseudoFermion:
-  //////////////////////////////////////////////////////
-  // dS/du = - phi^dag  (Mdag M)^-1 [ Mdag dM + dMdag M ]  (Mdag M)^-1 phi
-  //       = - phi^dag M^-1 dM (MdagM)^-1 phi -  phi^dag (MdagM)^-1 dMdag dM (Mdag)^-1 phi 
-  //
-  //       = - Ydag dM X  - Xdag dMdag Y
-  //
-  //////////////////////////////////////////////////////
-  // So must take dSdU - adj(dSdU) and left multiply by mom to get dS/dt.
-  //
-  // 
+  ComplexD dSpred    = sum(dS);
 
   std::cout << GridLogMessage << " S      "<<S<<std::endl;
   std::cout << GridLogMessage << " Sprime "<<Sprime<<std::endl;
   std::cout << GridLogMessage << "dS      "<<Sprime-S<<std::endl;
   std::cout << GridLogMessage << "predict dS    "<< dSpred <<std::endl;
+
+  assert( fabs(real(Sprime-S-dSpred)) < 2.0 ) ;
 
   std::cout<< GridLogMessage << "Done" <<std::endl;
   Grid_finalize();

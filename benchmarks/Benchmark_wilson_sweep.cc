@@ -23,21 +23,19 @@ Author: Richard Rollins <rprollins@users.noreply.github.com>
 
 using namespace std;
 using namespace Grid;
-using namespace Grid::QCD;
+ ;
 
 template<class d>
 struct scal {
   d internal;
 };
 
-Gamma::GammaMatrix Gmu [] = {
-  Gamma::GammaX,
-  Gamma::GammaY,
-  Gamma::GammaZ,
-  Gamma::GammaT
+Gamma::Algebra Gmu [] = {
+    Gamma::Algebra::GammaX,
+    Gamma::Algebra::GammaY,
+    Gamma::Algebra::GammaZ,
+    Gamma::Algebra::GammaT
 };
-
-bool overlapComms = false;
 
 void bench_wilson (
 		   LatticeFermion &    src,
@@ -46,15 +44,20 @@ void bench_wilson (
 		   double const     volume,
 		   int const           dag );
 
+void bench_wilson_eo (
+       LatticeFermion &    src,
+       LatticeFermion & result,
+       WilsonFermionR &     Dw,
+       double const     volume,
+       int const           dag );
+
 int main (int argc, char ** argv)
 {
   Grid_init(&argc,&argv);
-  if( GridCmdOptionExists(argv,argv+argc,"--asynch") ){ overlapComms = true; }
   typename WilsonFermionR::ImplParams params;
-  params.overlapCommsCompute = overlapComms;
 
-  std::vector<int> simd_layout = GridDefaultSimd(Nd,vComplex::Nsimd());
-  std::vector<int> mpi_layout  = GridDefaultMpi();
+  Coordinate simd_layout = GridDefaultSimd(Nd,vComplex::Nsimd());
+  Coordinate mpi_layout  = GridDefaultMpi();
   std::vector<int> seeds({1,2,3,4});
   RealD mass = 0.1;
 
@@ -62,6 +65,7 @@ int main (int argc, char ** argv)
   std::cout << GridLogMessage<< "* Kernel options --dslash-generic, --dslash-unroll, --dslash-asm" <<std::endl;
   std::cout << GridLogMessage<< "*****************************************************************" <<std::endl;
   std::cout << GridLogMessage<< "*****************************************************************" <<std::endl;
+  std::cout << GridLogMessage<< "* Number of colours "<< Nc <<std::endl;
   std::cout << GridLogMessage<< "* Benchmarking WilsonFermionR::Dhop                  "<<std::endl;
   std::cout << GridLogMessage<< "* Vectorising space-time by "<<vComplex::Nsimd()<<std::endl;
   if ( sizeof(Real)==4 )   std::cout << GridLogMessage<< "* SINGLE precision "<<std::endl;
@@ -69,13 +73,15 @@ int main (int argc, char ** argv)
   if ( WilsonKernelsStatic::Opt == WilsonKernelsStatic::OptGeneric   ) std::cout << GridLogMessage<< "* Using GENERIC Nc WilsonKernels" <<std::endl;
   if ( WilsonKernelsStatic::Opt == WilsonKernelsStatic::OptHandUnroll) std::cout << GridLogMessage<< "* Using Nc=3       WilsonKernels" <<std::endl;
   if ( WilsonKernelsStatic::Opt == WilsonKernelsStatic::OptInlineAsm ) std::cout << GridLogMessage<< "* Using Asm Nc=3   WilsonKernels" <<std::endl;
+  std::cout << GridLogMessage << "* OpenMP threads       : "<< GridThread::GetThreads() <<std::endl;
+  std::cout << GridLogMessage << "* MPI tasks            : "<< GridCmdVectorIntToString(mpi_layout) << std::endl;
   std::cout << GridLogMessage<< "*****************************************************************" <<std::endl;
 
-  std::cout<<GridLogMessage << "============================================================================="<< std::endl;
-  std::cout<<GridLogMessage << "= Benchmarking Wilson" << std::endl;
-  std::cout<<GridLogMessage << "============================================================================="<< std::endl;
-  std::cout<<GridLogMessage << "Volume\t\t\tWilson/MFLOPs\tWilsonDag/MFLOPs" << std::endl;
-  std::cout<<GridLogMessage << "============================================================================="<< std::endl;
+  std::cout<<GridLogMessage << "================================================================================================="<< std::endl;
+  std::cout<<GridLogMessage << "= Benchmarking Wilson operator in the fundamental representation" << std::endl;
+  std::cout<<GridLogMessage << "================================================================================================="<< std::endl;
+  std::cout<<GridLogMessage << "Volume\t\t\tWilson/MFLOPs\tWilsonDag/MFLOPs\tWilsonEO/MFLOPs\tWilsonDagEO/MFLOPs" << std::endl;
+  std::cout<<GridLogMessage << "================================================================================================="<< std::endl;
 
   int Lmax = 32;
   int dmin = 0;
@@ -83,29 +89,36 @@ int main (int argc, char ** argv)
   if ( getenv("DMIN") ) dmin=atoi(getenv("DMIN"));
   for (int L=8; L<=Lmax; L*=2)
     {
-      std::vector<int> latt_size = std::vector<int>(4,L);
+      Coordinate latt_size = Coordinate(4,L);
       for(int d=4; d>dmin; d--)
 	{
 	  if ( d<=3 ) { latt_size[d] *= 2; }
 
 	  std::cout << GridLogMessage;
-	  std::copy( latt_size.begin(), --latt_size.end(), std::ostream_iterator<int>( std::cout, std::string("x").c_str() ) );
-	  std::cout << latt_size.back() << "\t\t";
+	  std::cout << latt_size;
+	  std::cout << "\t\t";
 
 	  GridCartesian           Grid(latt_size,simd_layout,mpi_layout);
-	  GridRedBlackCartesian RBGrid(latt_size,simd_layout,mpi_layout);
+	  GridRedBlackCartesian RBGrid(&Grid);
 
 	  GridParallelRNG  pRNG(&Grid); pRNG.SeedFixedIntegers(seeds);
 	  LatticeGaugeField Umu(&Grid); random(pRNG,Umu);
 	  LatticeFermion    src(&Grid); random(pRNG,src);
-	  LatticeFermion result(&Grid); result=zero;
+	  LatticeFermion    src_o(&RBGrid); pickCheckerboard(Odd,src_o,src);
+	  LatticeFermion     result(&Grid); result=Zero();
+	  LatticeFermion result_e(&RBGrid); result_e=Zero();
 
 	  double volume = std::accumulate(latt_size.begin(),latt_size.end(),1,std::multiplies<int>());
 
 	  WilsonFermionR Dw(Umu,Grid,RBGrid,mass,params);
       
+    // Full operator      
 	  bench_wilson(src,result,Dw,volume,DaggerNo);
 	  bench_wilson(src,result,Dw,volume,DaggerYes);
+	  std::cout << "\t";
+    // EO
+    bench_wilson_eo(src_o,result_e,Dw,volume,DaggerNo);
+    bench_wilson_eo(src_o,result_e,Dw,volume,DaggerYes);
 	  std::cout << std::endl;
 	}
     }
@@ -122,9 +135,29 @@ void bench_wilson (
 		   int const           dag )
 {
   int ncall    = 1000;
+  long unsigned int single_site_flops = 8*Nc*(7+16*Nc);
   double t0    = usecond();
   for(int i=0; i<ncall; i++) { Dw.Dhop(src,result,dag); }
   double t1    = usecond();
-  double flops = 1344 * volume * ncall;
+  double flops = single_site_flops * volume * ncall;
+  double data_tp = (volume * 180 * 64 * ncall) / 1000.; // / (1024.*1024.*1024.);
+  //std::cout << flops/(t1-t0) << " (" << data_tp/(t1-t0) << " MB/s)  \t";
+  std::cout << flops/(t1-t0) << "\t\t";
+
+}
+
+void bench_wilson_eo (
+		   LatticeFermion &    src,
+		   LatticeFermion & result,
+		   WilsonFermionR &     Dw,
+		   double const     volume,
+		   int const           dag )
+{
+  int ncall    = 1000;
+  long unsigned int single_site_flops = 8*Nc*(7+16*Nc);
+  double t0    = usecond();
+  for(int i=0; i<ncall; i++) { Dw.DhopEO(src,result,dag); }
+  double t1    = usecond();
+  double flops = (single_site_flops * volume * ncall)/2.0;
   std::cout << flops/(t1-t0) << "\t\t";
 }

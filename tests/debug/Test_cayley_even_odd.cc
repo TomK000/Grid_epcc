@@ -29,18 +29,18 @@ Author: Peter Boyle <paboyle@ph.ed.ac.uk>
 
 using namespace std;
 using namespace Grid;
-using namespace Grid::QCD;
+ ;
 
 template<class d>
 struct scal {
   d internal;
 };
 
-  Gamma::GammaMatrix Gmu [] = {
-    Gamma::GammaX,
-    Gamma::GammaY,
-    Gamma::GammaZ,
-    Gamma::GammaT
+  Gamma::Algebra Gmu [] = {
+    Gamma::Algebra::GammaX,
+    Gamma::Algebra::GammaY,
+    Gamma::Algebra::GammaZ,
+    Gamma::Algebra::GammaT
   };
 
 
@@ -70,7 +70,7 @@ int main (int argc, char ** argv)
   GridParallelRNG          RNG5(FGrid);  RNG5.SeedFixedIntegers(seeds5);
   GridParallelRNG          RNG4(UGrid);  RNG4.SeedFixedIntegers(seeds4);
 
-  LatticeGaugeField Umu(UGrid); random(RNG4,Umu);
+  LatticeGaugeField Umu(UGrid); SU<Nc>::HotConfiguration(RNG4,Umu);
   std::vector<LatticeColourMatrix> U(4,UGrid);
 
   RealD mass=0.1;
@@ -81,9 +81,15 @@ int main (int argc, char ** argv)
 
   RealD b=1.5;// Scale factor b+c=2, b-c=1
   RealD c=0.5;
+  std::vector<ComplexD> gamma(Ls,ComplexD(1.0,0.1));
+  
   std::cout<<GridLogMessage <<"MobiusFermion test"<<std::endl;
   MobiusFermionR Dmob(Umu,*FGrid,*FrbGrid,*UGrid,*UrbGrid,mass,M5,b,c);
   TestWhat<MobiusFermionR>(Dmob,FGrid,FrbGrid,UGrid,UrbGrid,mass,M5,&RNG4,&RNG5);
+
+  std::cout<<GridLogMessage <<"ZMobiusFermion test"<<std::endl;
+  ZMobiusFermionR ZDmob(Umu,*FGrid,*FrbGrid,*UGrid,*UrbGrid,mass,M5,gamma,b,c);
+  TestWhat<ZMobiusFermionR>(ZDmob,FGrid,FrbGrid,UGrid,UrbGrid,mass,M5,&RNG4,&RNG5);
 
   std::cout<<GridLogMessage <<"MobiusZolotarevFermion test"<<std::endl;
   MobiusZolotarevFermionR Dzolo(Umu,*FGrid,*FrbGrid,*UGrid,*UrbGrid,mass,M5,b,c,0.1,2.0);
@@ -121,10 +127,10 @@ void  TestWhat(What & Ddwf,
   LatticeFermion src   (FGrid); random(*RNG5,src);
   LatticeFermion phi   (FGrid); random(*RNG5,phi);
   LatticeFermion chi   (FGrid); random(*RNG5,chi);
-  LatticeFermion result(FGrid); result=zero;
-  LatticeFermion    ref(FGrid);    ref=zero;
-  LatticeFermion    tmp(FGrid);    tmp=zero;
-  LatticeFermion    err(FGrid);    tmp=zero;
+  LatticeFermion result(FGrid); result=Zero();
+  LatticeFermion    ref(FGrid);    ref=Zero();
+  LatticeFermion    tmp(FGrid);    tmp=Zero();
+  LatticeFermion    err(FGrid);    tmp=Zero();
 
   LatticeFermion src_e (FrbGrid);
   LatticeFermion src_o (FrbGrid);

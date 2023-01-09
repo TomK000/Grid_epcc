@@ -1,6 +1,196 @@
-TODO:
----------------
+-- comms threads issue??
+-- Part done: Staggered kernel performance on GPU
 
+=========================================================
+General
+=========================================================
+
+- Make representations code take Gimpl
+- Simplify the HMCand remove modules
+- Lattice_arith - are the mult, mac etc.. still needed after ET engine?
+- Lattice_rng - faster local only loop in init
+- Audit: accelerate A2Autils -- off critical path for HMC
+
+=========================================================
+GPU  work list
+=========================================================
+
+* sum_cpu promote to double during summation for increased precision.
+* Introduce sumD & ReduceD 
+* GPU sum is probably better currently.
+* Accelerate the cshift & benchmark
+
+* 3) Comms/NVlink
+- OpenMP tasks to run comms threads. Experiment with it 
+- Remove explicit openMP in staggered. 
+- Single parallel region around both the Kernel call and the comms.
+- Fix the halo exchange SIMT loop
+- Stencil gather ??
+- SIMD dirs in stencil
+
+8) Merge develop and test HMC
+
+9) Gamma tables on GPU; check this. Appear to work, but no idea why. Are these done on CPU?
+
+10) Audit
+-     pragma once uniformly
+-     Audit NAMESPACE CHANGES
+-     Audit changes
+
+---------
+Gianluca's changes
+- Performance impact of construct in aligned allocator???
+---------
+
+- merge2 where is it used. Audit routines, comment out and check compile.
+
+-----------------------------
+DONE:
+-----------------------------
+=====
+-- Done: Remez X^-1/2 X^-1/2 X = 1 test.
+         Feed in MdagM^2 as a test and take its sqrt.
+         Automated test that MdagM invsqrt(MdagM)invsqrt(MdagM) = 1 in HMC for bounds satisfaction.
+
+-- Done: Sycl Kernels into develop. Compare to existing unroll and just use.
+-- Done: sRNG into refresh functions
+-- Done: Tuned decomposition on CUDA into develop
+-- Done: Sycl friend accessor. Const view attempt via typedef??
+
+
+* Done 5) Misc
+- Conserved current clean up.
+- multLinkProp eliminate
+
+* Done 0) Single GPU
+- 128 bit integer table load in GPU code.
+  - ImprovedStaggered accelerate & measure perf
+  - Gianluca's changes to Cayley into gpu-port
+  - Mobius kernel fusion.                     -- Gianluca?
+  - Lebesque order reintroduction. StencilView should have pointer to it
+  - Lebesgue reorder in all kernels
+
+* 4) ET enhancements
+- Done eval -> scalar ops in ET engine
+- Done coalescedRead, coalescedWrite in expressions.
+
+=============================================================================================
+AUDIT ContractWWVV with respect to develop    -- DONE
+- GPU accelerate EOFA                                                  -- DONE
+- LinalgUtils  ssp loop not offloaded                                  -- DONE
+- coalescedRead <- threadIdx.x                                         -- DONE
+- Stencil.h : Thread loops in exchange code. Need to offload these     -- DONE ; pending debug
+- Mobius/Domain EOFA cache header implementaiotn has thread_loop       -- DONE ; pending test
+- Differentiate non-temporal coalescedWrite from temporal              -- DONE
+
+- Clean up PRAGMAS, and SIMT_loop                                      -- DONE
+  thread_loop interface revisit.
+  _foreach
+  _for
+
+- Staggered kernels -> GPU coalesced loop, loop in kernels -- DONE
+- Staggered kernels inline for GPU -- DONE
+
+-- Common source GPU and CPU generic kernels???                  ---- DONE
+--   - Uniform coding between GPU kernels and CPU kernels attempt  ---- DONE, got faster !
+
+-- Figure what to do about "multLinkGpu" etc.. in FermionOperatorImpl. -- DONE
+-- Gparity is the awkward one                                          -- DONE
+-- Solve non-Gparity first.                                            -- DONE
+-- Simplify the operator IMPL support                                  -- DONE
+-- 
+--
+-- Investigate why slower than september     --- DONE
+--
+-- Single GPU simd target (VGPU) --- DONE
+--
+-- Reread WilsonKernels and check diffs -- DONE
+--
+
+- AVX512 still broken, lebesgue order missing ?
+
+* Gianluca merger
+  - Cayley coefficients -> GPU retention or prefetch
+  - Make GPU offload reductions deterministic -- Gianluca merge
+  - Lattice_reduction - remnant thread_loops must offload. Audit thread_loop in main code for non-accelerated code  
+  - Inner product compare to Summit inner product optimisation
+  - CayleyFermion5D.cc - flop count line 166 odd. Shouldn't depend on arch
+  -                    - Review Vector use
+  - CayleyFermion5D.h  - DperpGPU unify coding style
+
+- Committed my modifications
+- Accelerate non-dslash elements of Mobius; check accelerator_loop uniformly used in fermion operators
+   - Merged Gianluca modifications
+- Verify HMC one flavour ratio
+- GPU offload reductions: using thrust::reduce?
+- Deprecate JSON.
+- pugixml difficult.
+- Eigen problematic.
+- Audit HMC timestep / traj length size
+- GPU offload reductions; thrust initial ; inclusive_scan vs reduce?
+- Pragmas.h - prune and remove strong_inline (?)
+- GPU offload reductions; thrust initial ; inclusive_scan vs reduce?
+- Remove old parallel_for macros, fix errors
+- - Need (1) omp parallel for     <-- thread_loop
+- -      (2) omp for
+- -      (3) omp for collapse(n)
+- -      (4) omp parallel for collapse(n)
+- - Only (1) has a natural mirror in accelerator_loop
+- - Nested loop macros get cumbersome made a generic interface for N deep
+
+
+-----------------------------
+Physics item work list:
+-----------------------------
+
+2)- Consistent linear solver flop count/rate -- PARTIAL, time but no flop/s yet
+4)- Multigrid Wilson and DWF, compare to other Multigrid implementations
+5)- HDCR resume
+
+-----------------------------
+
+
+Nov 2018
+
+1)- BG/Q port and check ; Andrew says ok.
+3)- Physical propagator interface  -- DONE
+
+DONE
+a) namespaces & indentation
+ GRID_BEGIN_NAMESPACE();
+ GRID_END_NAMESPACE();
+-- delete QCD namespace
+
+b) GPU branch
+- start branch
+- Increase Macro use in core library support; prepare for change
+- Audit volume of "device" code
+- Virtual function audit
+- Start port once Nvidia box is up
+- Cut down volume of code for first port? How?
+
+----------------------------
+Recent DONE 
+-- RNG I/O in ILDG/SciDAC (minor) 
+-- Precision conversion and sort out localConvert      <-- partial/easy
+-- Conserved currents (Andrew)
+-- Split grid
+-- Christoph's local basis expansion Lanczos
+-- MultiRHS with spread out extra dim -- Go through filesystem with SciDAC I/O ; <-- DONE ; bmark cori
+-- Lanczos Remove DenseVector, DenseMatrix; Use Eigen instead. <-- DONE
+-- GaugeFix into central location                      <-- DONE
+-- Scidac and Ildg metadata handling                   <-- DONE
+-- Binary I/O MPI2 IO                                  <-- DONE
+-- Binary I/O speed up & x-strips                      <-- DONE
+-- Cut down the exterior overhead                      <-- DONE
+-- Interior legs from SHM comms                        <-- DONE
+-- Half-precision comms                                <-- DONE
+-- Merge high precision reduction into develop         <-- DONE
+-- BlockCG, BCGrQ                                      <-- DONE
+-- multiRHS DWF; benchmark on Cori/BNL for comms elimination <-- DONE
+   -- slice* linalg routines for multiRHS, BlockCG    
+
+-----
 * Forces; the UdSdU  term in gauge force term is half of what I think it should
   be. This is a consequence of taking ONLY the first term in:
 
@@ -21,15 +211,7 @@ TODO:
   This means we must double the force in the Test_xxx_force routines, and is the origin of the factor of two.
   This 2x is applied by hand in the fermion routines and in the Test_rect_force routine.
 
-
-Policies:
-
-* Link smearing/boundary conds; Policy class based implementation ; framework more in place
-
 * Support different boundary conditions (finite temp, chem. potential ... )
-
-* Support different fermion representations? 
-  - contained entirely within the integrator presently
 
 - Sign of force term.
 
@@ -41,11 +223,6 @@ Policies:
 
 - Audit oIndex usage for cb behaviour
 
-- Rectangle gauge actions.
-  Iwasaki,
-  Symanzik,
-  ... etc...
-
 - Prepare multigrid for HMC. - Alternate setup schemes.
 
 - Support for ILDG --- ugly, not done
@@ -55,9 +232,11 @@ Policies:
 - FFTnD ?
 
 - Gparity; hand opt use template specialisation elegance to enable the optimised paths ?
+
 - Gparity force term; Gparity (R)HMC.
-- Random number state save restore
+
 - Mobius implementation clean up to rmove #if 0 stale code sequences
+
 - CG -- profile carefully, kernel fusion, whole CG performance measurements.
 
 ================================================================
@@ -90,6 +269,7 @@ Insert/Extract
 Not sure of status of this -- reverify. Things are working nicely now though.
 
 * Make the Tensor types and Complex etc... play more nicely.
+
   - TensorRemove is a hack, come up with a long term rationalised approach to Complex vs. Scalar<Scalar<Scalar<Complex > > >
     QDP forces use of "toDouble" to get back to non tensor scalar. This role is presently taken TensorRemove, but I
     want to introduce a syntax that does not require this.
@@ -112,6 +292,8 @@ Not sure of status of this -- reverify. Things are working nicely now though.
 RECENT
 ---------------
 
+  - Support different fermion representations? -- DONE
+  - contained entirely within the integrator presently
   - Clean up HMC                                                             -- DONE
   - LorentzScalar<GaugeField> gets Gauge link type (cleaner).                -- DONE
   - Simplified the integrators a bit.                                        -- DONE
@@ -123,6 +305,28 @@ RECENT
   - Parallel io improvements                                  -- DONE
   - Plaquette and link trace checks into nersc reader from the Grid_nersc_io.cc test. -- DONE
 
+
+DONE:
+
+
+- MultiArray -- MultiRHS done
+- ConjugateGradientMultiShift -- DONE
+- MCR                         -- DONE
+- Remez -- Mike or Boost?     -- DONE
+- Proto (ET)                  -- DONE
+- uBlas                       -- DONE ; Eigen
+- Potentially Useful Boost libraries -- DONE ; Eigen
+- Aligned allocator; memory pool -- DONE
+- Multiprecision              -- DONE
+- Serialization               -- DONE
+- Regex -- Not needed
+- Tokenize -- Why?
+
+- Random number state save restore -- DONE
+- Rectangle gauge actions. -- DONE
+  Iwasaki,
+  Symanzik,
+  ... etc...
 Done: Cayley, Partial , ContFrac force terms.
 
 DONE
@@ -207,6 +411,7 @@ Done
 FUNCTIONALITY: it pleases me to keep track of things I have done (keeps me arguably sane)
 ======================================================================================================
 
+* Link smearing/boundary conds; Policy class based implementation ; framework more in place -- DONE
 * Command line args for geometry, simd, etc. layout. Is it necessary to have -- DONE
   user pass these? Is this a QCD specific?
 
